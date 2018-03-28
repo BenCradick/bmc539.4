@@ -6,4 +6,14 @@
 function handleInterrupt{
 
 }
+function toLowerCase {
+    sed -i -e 's/\(.*\)/\L\1/' $1
+}
+function determineFormat {
+
+}
+
 trap handleInterrupt
+
+
+
