@@ -3,59 +3,74 @@
 #cs 2750
 #3-28-18
 
+ declare -A usernames
+
  function handleInterrupt() {
-     rm usernames.txt name_frequency.txt collisions.txt
+     rm usernames.txt name_frequency.txt collisions.txt temp34.txt temp56.txt
      exit
  }
- function collision() {
-     ((collisions++));
- }
-trap handleInterrupt SIGINT
-awk 'BEGIN { FS=","} { print $2 " "  $1 }' $1 |\
-sed "s/^[ \t]*//"  |\
-sed -r  's/\b(JR|SR|II|III|IV|V|VI|VII|VIII|X)\b//g' |\
-awk '{print $1 " " $NF}' |\
-sed 's/[^a-zA-Z ]//g' |\
-sed 's/\b\([[:alpha:]]\)\([[:alpha:]]*\)\b/\u\1\L\2/g' > usernames.txt
-awk '{names[$1" "$2]++;}END{for (i in names)
-print i," ", names[i]}' usernames.txt | column -tc2 >> name_frequency.txt
-collisions=0;
-linecount=`wc -l $1 | awk '{print $1}'`
+ function genNames() {
+    #sets field seperator to "," and reorders rows that have it
+    #removes leading spaces
+    #removes common name suffixes VI and XI excluded because both are sometimes names VI short for violet, XI as in Xi Jinping
+    #removes middle names
+    #removes non alphabet characters
+    #Capitalizes first name of each word
+    awk 'BEGIN { FS=","} { print $2 " "  $1 }' $1 |\
+    sed "s/^[ \t]*//"  |\
+    sed -r  's/\b(JR|SR|II|III|IV|V|VI|VII|VIII|X)\b//g' |\
+    awk '{print $1 " " $NF}' |\
+    sed 's/[^a-zA-Z ]//g' |\
+    sed 's/\b\([[:alpha:]]\)\([[:alpha:]]*\)\b/\u\1\L\2/g' >> usernames.txt
+    
+    #counts instances of each given name
+    awk '{names[$1" "$2]++;}END{for (i in names)
+    print i," ", names[i]}' usernames.txt | column -tc2 >> name_frequency.txt
+#gives number of columns in input file
 
-declare -A usernames
-
+linecount=`wc -l usernames.txt | awk '{print $1}'`
+if [[ ! -z $2]]; then
+    (($linecount += $2))
+    i=$2
+else 
 i=1
+fi
 
+
+#go through chain of possible 
+#names: first, last, first initial + last, first + last initial, last + first initial, first initial+ last+ number 01 - 99
+#forewent using elif so that I could assign variables just in time instad of all up front.
 while (($i <= $linecount + 1)); do
     username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,8)); exit}' usernames.txt`
     
-    #echo $collisions
     if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+        #initialize username to 1
         usernames["$username"]=1;
+        #insert at the username at the current line number inplace
         sed -i "$i"'s/$/ '"$username"'/' usernames.txt
     else
+        #increment count then reassign username this is repeated below
         ((usernames[$username]++))
+        #grabs the last name truncated to 8 characters all usernames are truncated to 8 characters
         username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,8)); exit}' usernames.txt`
-        collision
         if [[  ! ${usernames["$username"]} -ge 1 ]]; then
             usernames["$username"]=1;
-             sed  -i "$i"'s/$/ '"$username"'/' usernames.txt 
+            sed  -i "$i"'s/$/ '"$username"'/' usernames.txt 
         else
-        collision
         ((usernames[$username]++))
         username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) substr($2,1,7)); exit}' usernames.txt`
             if [[  ! ${usernames["$username"]} -ge 1 ]]; then
                 usernames["$username"]=1;
                 sed -i "$i"'s/$/ '"$username"'/' usernames.txt
                 else
-                collision
+    
                 ((usernames[$username]++))
                 username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,7) substr($2,1,1)); exit}' usernames.txt`
                 if [[  ! ${usernames["$username"]} -ge 1 ]]; then
                     usernames["$username"]=1;
                     sed -i "$i"'s/$/ '"$username"'/' usernames.txt
                 else
-                    collision
+        
                     ((usernames[$username]++))
                     username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,7) substr($1,1,1)); exit}' usernames.txt`
                     if [[  ! ${usernames["$username"]} -ge 1 ]]; then
@@ -68,7 +83,7 @@ while (($i <= $linecount + 1)); do
                                 ((usernames[$username]++))
                                 k=`printf "%02d" $j`
                                 username="$fast$k"
-                                collision
+                    
                                 ((j++))
                         done
                         usernames["$username"]=1;
@@ -89,3 +104,48 @@ done
 
 awk '$2 != 0' collisions.txt | column -tc2 >> temp56.txt
 mv temp56.txt collisions.txt
+}
+
+#handles command line interrupts and deletes generated files as per  handleInterrupt()
+trap handleInterrupt SIGINT
+if [[ -z $1 ]]; then
+echo "no argument specified: Either follow generate_username with a file you want 
+to turn into a list of names and usernames or enter -a to add a single user to usernames.txt or -s to add a set of users, use First Last format"
+for ((arg=1; arg<=$#; arg++)); do
+    if [[ -f "${arg}" ]]; then
+        if [[ ! -f usernames.txt ]]; then
+            genNames "${!arg}"
+        elif [[ -f usernames.txt ]]; then
+            linecount=`wc -l usernames.txt | awk '{print $1}'`
+            for i in $linecount; do
+                username=`awk -v i="$i" 'NR == i {print $3}; exit}' usernames.txt`
+                if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+                    usernames[$username]=1
+                else
+                    ((usernames[$username]++))
+                fi
+            done
+            genNames "${!arg}" "$linecount" 
+        fi
+    elif [ "${!1}" == "-a"]; do
+        name="${!2}${!3}"
+        echo "$name" > temp34.txt
+        bash generate_username temp34.txt
+        rm temp34.txt
+        exit
+    elif [ "${!1}" == "-s" ]
+        num=$#
+        if [[ $((num%2)) -eq 0]]; then
+            echo "incorrect number of arguments applied, should have an odd cardinality"
+        
+        elif [[ ! $((num%2)) -eq 0 ]];
+
+
+
+
+
+         
+
+
+
+
