@@ -4,61 +4,88 @@
 #3-28-18
 
  function handleInterrupt() {
-     rm names4
+     rm usernames.txt name_frequency.txt collisions.txt
      exit
  }
  function collision() {
      ((collisions++));
  }
-# function genNames {
-
-# }
 trap handleInterrupt SIGINT
-# awk 'BEGIN { FS=","} { print $2 " "  $1 }' names.txt |\
-# sed "s/^[ \t]*//"  |\
-# awk '{print $1 " " $NF}' |\
-# sed 's/[^a-zA-Z ]//g' |\
-# sed 's/\b\([[:alpha:]]\)\([[:alpha:]]*\)\b/\u\1\L\2/g' > names2.txt
+awk 'BEGIN { FS=","} { print $2 " "  $1 }' $1 |\
+sed "s/^[ \t]*//"  |\
+sed -r  's/\b(JR|SR|II|III|IV|V|VI|VII|VIII|X)\b//g' |\
+awk '{print $1 " " $NF}' |\
+sed 's/[^a-zA-Z ]//g' |\
+sed 's/\b\([[:alpha:]]\)\([[:alpha:]]*\)\b/\u\1\L\2/g' > usernames.txt
+awk '{names[$1" "$2]++;}END{for (i in names)
+print i," ", names[i]}' usernames.txt | column -tc2 >> name_frequency.txt
 collisions=0;
-linecount=`wc -l names3.txt | awk '{print $1}'`
+linecount=`wc -l $1 | awk '{print $1}'`
 
-rm names4
-cp names3.txt names4
+declare -A usernames
+
 i=1
 
 while (($i <= $linecount + 1)); do
-    username=`sed  "$i"'q;d' names4 | awk '{print tolower($1)}' | cut -c-8`
+    username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,8)); exit}' usernames.txt`
     
     #echo $collisions
-    if (! grep -q "$username" names4 ); then
-        sed -i "$i"'s/$/ '"$username"'/' names4
+    if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+        usernames["$username"]=1;
+        sed -i "$i"'s/$/ '"$username"'/' usernames.txt
     else
-        username=`sed  "$i"'q;d' names4 | awk '{print tolower($2)}'| cut -c-8`
+        ((usernames[$username]++))
+        username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,8)); exit}' usernames.txt`
         collision
-        if (! grep -q "$username" names4 ); then
-             sed  -i "$i"'s/$/ '"$username"'/' names4 
+        if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+            usernames["$username"]=1;
+             sed  -i "$i"'s/$/ '"$username"'/' usernames.txt 
         else
         collision
-        username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,1) $1); exit}' names4 | cut -c-8`
-            if (! grep -q "$username" names4 ); then
-                sed -i "$i"'s/$/ '"$username"'/' names4
+        ((usernames[$username]++))
+        username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) substr($2,1,7)); exit}' usernames.txt`
+            if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+                usernames["$username"]=1;
+                sed -i "$i"'s/$/ '"$username"'/' usernames.txt
                 else
                 collision
-                username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) $2); exit}' names4 | cut -c-8`
-                if (! grep -q "$username" names4 ); then
-                    sed -i "$i"'s/$/ '"$username"'/' names4
+                ((usernames[$username]++))
+                username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,7) substr($2,1,1)); exit}' usernames.txt`
+                if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+                    usernames["$username"]=1;
+                    sed -i "$i"'s/$/ '"$username"'/' usernames.txt
+                else
+                    collision
+                    ((usernames[$username]++))
+                    username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,7) substr($1,1,1)); exit}' usernames.txt`
+                    if [[  ! ${usernames["$username"]} -ge 1 ]]; then
+                        usernames["$username"]=1;
+                        sed -i "$i"'s/$/ '"$username"'/' usernames.txt
                     else
-                    while (! grep -q "$username" names4 ); do
-                    fast=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,1) $1); exit}' names4 | cut -c-6`
-                    username=
+                        fast=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) substr($2,1,5)); exit}' usernames.txt`
+                        j=1
+                        while [[  ${usernames["$username"]} -ge 1 ]]; do
+                                ((usernames[$username]++))
+                                k=`printf "%02d" $j`
+                                username="$fast$k"
+                                collision
+                                ((j++))
+                        done
+                        usernames["$username"]=1;
+                        sed -i "$i"'s/$/ '"$username"'/' usernames.txt
+                    fi        
                 fi
             fi    
         fi     
     fi
      ((i++))
 done
+column -tc2 usernames.txt >> temp_names_generated.txt
+mv temp_names_generated.txt usernames.txt
+for i in "${!usernames[@]}"; do
+    ((usernames[$i]--))
+    echo "$i ${usernames[$i]}"  >> collisions.txt
+done
 
-
-
-
-
+awk '$2 != 0' collisions.txt | column -tc2 >> temp56.txt
+mv temp56.txt collisions.txt
