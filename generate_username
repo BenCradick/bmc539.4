@@ -51,6 +51,7 @@ fi
 #names: first, last, first initial + last, first + last initial, last + first initial, first initial+ last+ number 01 - 99
 #forewent using elif so that I could assign variables just in time instad of all up front.
 while (($i <= $linecount)); do
+    #username is first name
     username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,8)); exit}' usernames.txt`
     
     if [[  ! ${usernames["$username"]} -ge 1 ]]; then
@@ -68,6 +69,7 @@ while (($i <= $linecount)); do
             sed  -i "$i"'s/$/ '"$username"'/' usernames.txt 
         else
         ((usernames[$username]++))
+        #first initlial + last name trunc ot 8 char
         username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) substr($2,1,7)); exit}' usernames.txt`
             if [[  ! ${usernames["$username"]} -ge 1 ]]; then
                 usernames["$username"]=1;
@@ -75,6 +77,7 @@ while (($i <= $linecount)); do
                 else
     
                 ((usernames[$username]++))
+                #username is first 7 letters of first name plus last initial
                 username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,7) substr($2,1,1)); exit}' usernames.txt`
                 if [[  ! ${usernames["$username"]} -ge 1 ]]; then
                     usernames["$username"]=1;
@@ -82,22 +85,29 @@ while (($i <= $linecount)); do
                 else
         
                     ((usernames[$username]++))
+                    #username is first 7 letters of last + first initial
                     username=`awk -v i="$i" 'NR == i {print tolower(substr($2,1,7) substr($1,1,1)); exit}' usernames.txt`
                     if [[  ! ${usernames["$username"]} -ge 1 ]]; then
                         usernames["$username"]=1;
                         sed -i "$i"'s/$/ '"$username"'/' usernames.txt
                     else
+                        #fast is the base format for usernames with numbers fast is 
                         fast=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,1) substr($2,1,5)); exit}' usernames.txt`
                         j=1
-                        while [[  ${usernames["$username"]} -ge 1 ]]; do
+                        while [[  ${usernames["$username"]} -ge 1 &&  $j -le 100 ]] ; do
                                 ((usernames[$username]++))
                                 k=`printf "%02d" $j`
                                 username="$fast$k"
                     
                                 ((j++))
                         done
+                        #generates report if a user could not be resolved
+                        if [[ $j -gt 100 ]]; then
+                            awk -v i="$i" 'NR == i {print $1" "$2; exit}' usernames.txt >> unresolved_names.txt 
+                        else
                         usernames["$username"]=1;
                         sed -i "$i"'s/$/ '"$username"'/' usernames.txt
+                        fi
                     fi        
                 fi
             fi    
@@ -147,9 +157,13 @@ for ((arg=1; arg<=$#; arg++)); do
                     ((usernames[$username]++))
                 fi
             done
+            #need to increment line count so we start appending the file at the correct row.
             ((linecount++))
+            #all that was done above was prep the assoc array with the usernames that are already being used 
+            #then we run like we're a normal file.
             genNames "${!arg}" "$linecount"
         fi
+    # now we handle if the -a parameter is given, -a is a single name addendum
     elif [ "${1}" == "-a" ]; then
         name="$3,$2"
         echo "$name" > temp34.txt
@@ -184,9 +198,10 @@ for ((arg=1; arg<=$#; arg++)); do
                 rm temp34.txt
                 exit
             fi
-        
+    #handles the -s parameter which allows us to handle multiple usernames
     elif [ "${1}" == "-s" ]; then
         num=$#
+        #number of arguemnts must be odd if -s + n first name last name combinations is the arguement.
         if [[ $((num%2)) -eq 0 ]]; then
             echo "incorrect number of arguments applied, should have an odd cardinality"
                 exit
@@ -219,6 +234,50 @@ for ((arg=1; arg<=$#; arg++)); do
                 rm sed*
             fi
             exit
-        fi
+       fi
+    elif [ "${1}" == "-m" ]; then
+            echo "Please enter the first name"
+            read first
+            echo "Please enter the last name"
+            read last
+            echo "Please enter the desired username"
+            read custom_name
+            
+            if [[ -f usernames.txt ]]; then
+                    getLineCount
+                        for (( i = 1; i <= $linecount; i++)); do
+                            username=`awk -v i="$i" 'NR == i {print $3; exit}' usernames.txt`
+                            if [ -z $username ]; then
+                            shutup=o
+                            elif [[  ! ${usernames[$username]} -ge 1 ]]; then
+                                usernames["$username"]=1
+                            else
+                                ((usernames[$username]++))
+                            fi
+                        done
+                        while [[ ${usernames[$custom_name]} -ge 1 ]]; do
+                            echo "Username already taken, please select a different one"
+                            read custom_name
+                            
+                        done
+                        
+                        
+                        
+                        awk -v first=$first -v last=$last -v custom_name=$custom_name -v linecount=$linecount 'BEGIN{charges=1}
+                        {
+                            if ($1 == first && $2 == last && NF < 3 && charges == 1) {
+                            print $1" "$2" "custom_name 
+                            --charges }
+                          else if (NR == linecount && charges == 1) {
+                            NR == ++linecount
+                            print first" "last" "custom_name} 
+                          else if (NF == 3){
+                            print $1" "$2" "$3}
+                          else{
+                              print $1" "$2
+                          }}' usernames.txt | column -tc2 >> usernames_temp.txt
+                        mv usernames_temp.txt usernames.txt
+                        exit
+            fi
     fi
 done
