@@ -139,7 +139,7 @@ trap handleInterrupt SIGINT SIGTERM
 #checks argument format
 if [[ ! -f "$1" &&  -z "$1" ]]; then
 echo "no argument specified: Either follow generate_username with a file you want 
-to turn into a list of names and usernames or enter -a to add a single user to usernames.txt or -s to add a set of users, use First Last format"
+to turn into a list of names and usernames or enter -a to add a single user to usernames.txt, -m for custom name, or -s to add a set of users, use First Last format"
 exit
 fi
 #cycle through all arguements so you can enter multiple names lists.
@@ -236,6 +236,9 @@ for ((arg=1; arg<=$#; arg++)); do
             exit
        fi
     elif [ "${1}" == "-m" ]; then
+            if [[ ! -f usernames.txt ]]; then
+                touch usernames.txt
+            fi
             echo "Please enter the first name"
             read first
             echo "Please enter the last name"
