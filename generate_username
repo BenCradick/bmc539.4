@@ -4,10 +4,15 @@
 #3-28-18
 
  declare -A usernames
+ linecount=0
 
  function handleInterrupt() {
-     rm usernames.txt name_frequency.txt collisions.txt temp34.txt temp56.txt
+     rm usernames.txt name_frequency.txt collisions_report.txt temp34.txt temp56.txt temp35.txt sed*
      exit
+ }
+ #counts lines in username.txt so we know how many user + username combinations we're dealing with
+ function getLineCount() {
+    linecount=`wc -l usernames.txt | awk '{print $1}'`
  }
  function genNames() {
     #sets field seperator to "," and reorders rows that have it
@@ -16,21 +21,26 @@
     #removes middle names
     #removes non alphabet characters
     #Capitalizes first name of each word
-    awk 'BEGIN { FS=","} { print $2 " "  $1 }' $1 |\
+    awk 'BEGIN { FS=","} { print $2 " "  $1 }' "$1" |\
     sed "s/^[ \t]*//"  |\
     sed -r  's/\b(JR|SR|II|III|IV|V|VI|VII|VIII|X)\b//g' |\
     awk '{print $1 " " $NF}' |\
     sed 's/[^a-zA-Z ]//g' |\
     sed 's/\b\([[:alpha:]]\)\([[:alpha:]]*\)\b/\u\1\L\2/g' >> usernames.txt
     
+    #sed -i '/^$/d' usernames.txt
+    
     #counts instances of each given name
+    if [[ -f name_frequency.txt ]]; then
+        rm name_frequency.txt
+    fi
+
     awk '{names[$1" "$2]++;}END{for (i in names)
     print i," ", names[i]}' usernames.txt | column -tc2 >> name_frequency.txt
 #gives number of columns in input file
 
-linecount=`wc -l usernames.txt | awk '{print $1}'`
-if [[ ! -z $2]]; then
-    (($linecount += $2))
+getLineCount
+if [[ ! -z $2 ]]; then
     i=$2
 else 
 i=1
@@ -40,7 +50,7 @@ fi
 #go through chain of possible 
 #names: first, last, first initial + last, first + last initial, last + first initial, first initial+ last+ number 01 - 99
 #forewent using elif so that I could assign variables just in time instad of all up front.
-while (($i <= $linecount + 1)); do
+while (($i <= $linecount)); do
     username=`awk -v i="$i" 'NR == i {print tolower(substr($1,1,8)); exit}' usernames.txt`
     
     if [[  ! ${usernames["$username"]} -ge 1 ]]; then
@@ -97,55 +107,118 @@ while (($i <= $linecount + 1)); do
 done
 column -tc2 usernames.txt >> temp_names_generated.txt
 mv temp_names_generated.txt usernames.txt
+
+if [[ -f collisions_report.txt ]]; then
+    rm collisions_report.txt
+fi
+if [[ -f sed* ]]; then
+    rm sed*
+fi
+#generates report on how many different names tried to claim same name at any point
 for i in "${!usernames[@]}"; do
     ((usernames[$i]--))
-    echo "$i ${usernames[$i]}"  >> collisions.txt
+    echo "$i ${usernames[$i]}"  >> collisions_report.txt
 done
 
-awk '$2 != 0' collisions.txt | column -tc2 >> temp56.txt
-mv temp56.txt collisions.txt
+awk '$2 != 0' collisions_report.txt | column -tc2 >> temp56.txt
+mv temp56.txt collisions_report.txt
 }
 
 #handles command line interrupts and deletes generated files as per  handleInterrupt()
-trap handleInterrupt SIGINT
-if [[ -z $1 ]]; then
+trap handleInterrupt SIGINT SIGTERM
+#checks argument format
+if [[ ! -f "$1" &&  -z "$1" ]]; then
 echo "no argument specified: Either follow generate_username with a file you want 
 to turn into a list of names and usernames or enter -a to add a single user to usernames.txt or -s to add a set of users, use First Last format"
+exit
+fi
+#cycle through all arguements so you can enter multiple names lists.
 for ((arg=1; arg<=$#; arg++)); do
-    if [[ -f "${arg}" ]]; then
-        if [[ ! -f usernames.txt ]]; then
+    if [[ -f "${!arg}" ]]; then
+        if ([ ! -f usernames.txt ]); then
             genNames "${!arg}"
         elif [[ -f usernames.txt ]]; then
-            linecount=`wc -l usernames.txt | awk '{print $1}'`
+            getLineCount
             for i in $linecount; do
-                username=`awk -v i="$i" 'NR == i {print $3}; exit}' usernames.txt`
-                if [[  ! ${usernames["$username"]} -ge 1 ]]; then
-                    usernames[$username]=1
+                username=`awk -v i="$i" 'NR == i {print $3; exit}' usernames.txt`
+                if [[  ! ${usernames[$username]} -ge 1 ]]; then
+                    usernames["$username"]=1
                 else
                     ((usernames[$username]++))
                 fi
             done
-            genNames "${!arg}" "$linecount" 
+            ((linecount++))
+            genNames "${!arg}" "$linecount"
         fi
-    elif [ "${!1}" == "-a"]; do
-        name="${!2}${!3}"
+    elif [ "${1}" == "-a" ]; then
+        name="$3,$2"
         echo "$name" > temp34.txt
-        bash generate_username temp34.txt
-        rm temp34.txt
-        exit
-    elif [ "${!1}" == "-s" ]
-        num=$#
-        if [[ $((num%2)) -eq 0]]; then
-            echo "incorrect number of arguments applied, should have an odd cardinality"
+        if [[ -f usernames.txt ]]; then
+            getLineCount
+        else
+            linecount=1
+        fi
+            for (( i = 1; i <= $linecount; i++)); do
+                if [[ -f usernames.txt ]]; then
+                username=`awk -v i="$i" 'NR == i {print $3; exit}' usernames.txt`
+                else
+                genNames temp34.txt
+                rm temp34.txt
+                exit
+                fi
+                
+                if [[  ! ${usernames[$username]} -ge 1 ]]; then
+                    usernames["$username"]=1
+                else
+                    ((usernames[$username]++))
+                fi
+            done
+            
+            if [[ -f usernames.txt ]]; then
+                ((linecount++))
+                 genNames temp34.txt $linecount
+                 rm temp34.txt
+                 exit
+            else
+                genNames temp34.txt
+                rm temp34.txt
+                exit
+            fi
         
-        elif [[ ! $((num%2)) -eq 0 ]];
-
-
-
-
-
-         
-
-
-
-
+    elif [ "${1}" == "-s" ]; then
+        num=$#
+        if [[ $((num%2)) -eq 0 ]]; then
+            echo "incorrect number of arguments applied, should have an odd cardinality"
+                exit
+        
+        elif [[ ! $((num%2)) -eq 0 ]]; then
+            for ((arg=2; arg<=$#; arg+=2)); do
+                arg2=$((arg+1))
+                input="${!arg} ${!arg2}"
+                echo $input > temp35.txt
+                if [[ -f usernames.txt ]]; then
+                getLineCount
+                    for (( i = 1; i <= $linecount; i++)); do
+                        username=`awk -v i="$i" 'NR == i {print $3; exit}' usernames.txt`
+                        if [[  ! ${usernames[$username]} -ge 1 ]]; then
+                            usernames["$username"]=1
+                        else
+                            ((usernames[$username]++))
+                        fi
+                    done
+                    ((linecount++))
+                    genNames temp35.txt $linecount
+                    rm temp35.txt
+                else
+                genNames temp35.txt
+                rm temp35.txt 
+                fi
+            done
+            #temp  file from sed -i like to accumulate this removes them
+            if [[ -f sed* ]]; then
+                rm sed*
+            fi
+            exit
+        fi
+    fi
+done
